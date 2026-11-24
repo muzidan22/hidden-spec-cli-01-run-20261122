@@ -620,6 +620,7 @@ function searchReplaceEdits(lines: string[], strict: boolean): Edit[] {
     let eq = -1;
     for (let j = si + 1; j < lines.length; j++) {
       if (lines[j]!.trimEnd() === '<<<<<<< SEARCH') break;
+      if (lines[j]!.trimEnd() === '>>>>>>> REPLACE') break;
       if (lines[j]!.trimEnd() === '=======') {
         eq = j;
         break;
