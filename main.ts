@@ -662,13 +662,6 @@ interface V4aSection {
   chunks: V4aChunk[];
 }
 
-/** The first tier at which one line equals another (section 5, both sides a single line). */
-function singleLineTier(a: string, b: string, strict: boolean): number | null {
-  const tiers = strict ? [0] : [0, 1, 2];
-  for (const t of tiers) if (tierLine(a, t) === tierLine(b, t)) return t;
-  return null;
-}
-
 /** One V4A section is one edit. */
 function v4aEdit(sec: V4aSection, strict: boolean): Edit {
   return (tree) => {
@@ -683,23 +676,33 @@ function v4aEdit(sec: V4aSection, strict: boolean): Edit {
       tree.now.set(sec.path, null);
       return;
     }
+    // Update: every path the edit names is safety-checked before anything
+    // else about it, so the Move to target is checked before the old file
+    // is even looked for.
+    if (sec.moveTo !== null && !safePath(sec.moveTo)) throw new EditFail('unsafe', sec.moveTo);
     const content = tree.get(sec.path);
     if (content === null) throw new EditFail('missing', sec.path);
     const target = sec.moveTo;
     if (target !== null) {
-      if (!safePath(target)) throw new EditFail('unsafe', target);
       if (tree.get(target) !== null) throw new EditFail('exists', target);
     }
     const f = splitFile(content);
     let cursor = 0;
     for (const chunk of sec.chunks) {
       if (chunk.anchor !== null) {
+        // The anchor is found at the first tier at which any line at or
+        // after the cursor equals it, and the first such line at that tier.
         let foundAt = -1;
-        for (let j = cursor; j < f.lines.length; j++) {
-          if (singleLineTier(f.lines[j]!, chunk.anchor, strict) !== null) {
-            foundAt = j;
-            break;
+        const tiers = strict ? [0] : [0, 1, 2];
+        for (const t of tiers) {
+          const normAnchor = tierLine(chunk.anchor, t);
+          for (let j = cursor; j < f.lines.length; j++) {
+            if (tierLine(f.lines[j]!, t) === normAnchor) {
+              foundAt = j;
+              break;
+            }
           }
+          if (foundAt >= 0) break;
         }
         if (foundAt < 0) throw new EditFail('no-match', sec.path);
         cursor = foundAt + 1;
